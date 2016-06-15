@@ -1,3 +1,4 @@
+#pragma warning(disable:4996)
 #include "block_file.h"
 #include <cstring>
 
@@ -28,16 +29,15 @@ BlockFile::BlockFile(				// constructor
 	block_length_ = b_length;
 
 	num_blocks_ = 0;				// num of blocks, init to 0
-	// -------------------------------------------------------------------------
-	//  Init <fp> and open <file_name_>. If <file_name_> exists, then fp != 0,
-	//  and we excute if-clause program. Otherwise, we excute else-clause 
-	//  program.
-	//
-	//  "rb+": read or write data from or into binary doc. if the file not 
-	//  exist, it will return NULL.
-	//  用二进制格式打开文件准备读写
-	// -------------------------------------------------------------------------
-	if ((fp_ = fopen(name, "rb+")) != nullptr) {
+									// -------------------------------------------------------------------------
+									//  Init <fp> and open <file_name_>. If <file_name_> exists, then fp != 0,
+									//  and we excute if-clause program. Otherwise, we excute else-clause 
+									//  program.
+									//
+									//  "rb+": read or write data from or into binary doc. if the file not 
+									//  exist, it will return NULL.
+									// -------------------------------------------------------------------------
+	if ((fp_ = fopen(name, "rb+")) != 0) {
 		// ---------------------------------------------------------------------
 		//  Init <new_flag_> (since the file exists, <new_flag_> is false).
 		//  Reinit <block_length_> (determined by the doc itself).
@@ -46,7 +46,8 @@ BlockFile::BlockFile(				// constructor
 		new_flag_ = false;			// reinit <block_length_> by file
 		block_length_ = fread_number();
 		num_blocks_ = fread_number();
-	} else {
+	}
+	else {
 		// ---------------------------------------------------------------------
 		//  <file_name_> not exists. we construct new file and reinit paras.
 		// ---------------------------------------------------------------------
@@ -54,8 +55,6 @@ BlockFile::BlockFile(				// constructor
 			// -----------------------------------------------------------------
 			//  Ensure <block_length_> is larger than or equal to 8 bytes.
 			//  8 bytes = 4 bypes <block_length_> + 4 bytes <num_blocks_>.
-			//  意思是，由于header部分储存了2个int，它至少有8 bytes的大小
-			//  block_length_比这还小，是不合理的。
 			// -----------------------------------------------------------------
 			error("BlockFile::BlockFile couldnot open file.\n", true);
 		}
@@ -65,7 +64,7 @@ BlockFile::BlockFile(				// constructor
 		//  exist, we will construct a new file.
 		// ---------------------------------------------------------------------
 		fp_ = fopen(file_name_, "wb+");
-		if (fp_ == nullptr) {
+		if (fp_ == NULL) {
 			error("BlockFile::BlockFile could not create file.\n", true);
 		}
 
@@ -81,18 +80,18 @@ BlockFile::BlockFile(				// constructor
 		// ---------------------------------------------------------------------
 		//  Since <block_length_> >= 8 bytes, for the remain bytes, we will 
 		//  init 0 to them.
-		//  用0填充一个block剩下的部分。
-		//  ftell() 返回从文件开头到目前的位置有几个bytes。
+		//
+		//  ftell() return number of bytes from current position to the 
+		//  beginning position of the file.
 		// ---------------------------------------------------------------------
-		char* buffer = nullptr;
-		int len = block_length_ - static_cast<int>(ftell(fp_));				// cmpt remain length of a block
-		buffer = new char[len];
-									// set to 0 to remain bytes
+		char* buffer = NULL;
+		int len = -1;				// cmpt remain length of a block
+		buffer = new char[(len = block_length_ - (int)ftell(fp_))];
+		// set to 0 to remain bytes
 		memset(buffer, 0, sizeof(buffer));
 		put_bytes(buffer, len);
 
-		delete[] buffer;
-		buffer = nullptr;
+		delete[] buffer; buffer = NULL;
 	}
 	// -------------------------------------------------------------------------
 	//  Redirect file pointer to the start position of the file
@@ -105,45 +104,44 @@ BlockFile::BlockFile(				// constructor
 BlockFile::~BlockFile()				// destructor
 {
 	if (file_name_) {				// release space of <file_name_>
-		delete[] file_name_;
-		file_name_ = nullptr;
+		delete[] file_name_; file_name_ = NULL;
 	}
 	if (fp_) fclose(fp_);			// close <fp_>
 }
 
 // -----------------------------------------------------------------------------
 void BlockFile::fwrite_number(		// write an <int> value to bin file
-	int value) const  // a value of type <int>
+	int value)							// a value of type <int>
 {
-	put_bytes(reinterpret_cast<char *>(&value), SIZEINT);
+	put_bytes((char *)&value, SIZEINT);
 }
 
 // -----------------------------------------------------------------------------
-int BlockFile::fread_number() const  // read an <int> value from bin file
+int BlockFile::fread_number() 		// read an <int> value from bin file
 {
 	char ca[SIZEINT];
 	get_bytes(ca, SIZEINT);
 
-	return *reinterpret_cast<int *>(ca);
+	return *((int *)ca);
 }
 
 // -----------------------------------------------------------------------------
 //  Note that this func does not read the header of blockfile. It fetches the 
 //  info in the first block excluding the header of blockfile.
-//  用来跳过header，为读取后面的数据做好准备。
 // -----------------------------------------------------------------------------
 void BlockFile::read_header(		// read remain bytes excluding header
 	char* buffer)						// contain remain bytes (return)
 {
-									// jump out of first 8 bytes
+	// jump out of first 8 bytes
 	fseek(fp_, BFHEAD_LENGTH, SEEK_SET);
-									// read remain bytes into <buffer>
-	get_bytes(buffer, block_length_ - BFHEAD_LENGTH); 
+	// read remain bytes into <buffer>
+	get_bytes(buffer, block_length_ - BFHEAD_LENGTH);
 
 	if (num_blocks_ < 1) {			// no remain bytes
 		fseek(fp_, 0, SEEK_SET);	// fp return to beginning pos
 		act_block_ = 0;				// no act block
-	} else {
+	}
+	else {
 		// ---------------------------------------------------------------------
 		//  Since we have read the first block (header block) of block file,
 		//  thus <act_block_> = 1, and the file pointer point to the 2nd block
@@ -156,16 +154,15 @@ void BlockFile::read_header(		// read remain bytes excluding header
 // -----------------------------------------------------------------------------
 //  Note that this func does not write the header of blockfile. It writes the 
 //  info in the first block excluding the header of blockfile.
-//  在基本的header（2个int，分别为block的长度和个数）以外储存额外的信息。
 // -----------------------------------------------------------------------------
 void BlockFile::set_header(			// set remain bytes excluding header
 	char* header)						// contain remain bytes
 {
-									// jump out of first 8 bytes
+	// jump out of first 8 bytes
 	fseek(fp_, BFHEAD_LENGTH, SEEK_SET);
-									// write remain bytes into <buffer>
+	// write remain bytes into <buffer>
 	put_bytes(header, block_length_ - BFHEAD_LENGTH);
-	
+
 	if (num_blocks_ < 1) {			// no remain bytes
 		fseek(fp_, 0, SEEK_SET);	// fp return to beginning pos
 		act_block_ = 0;				// no act block
@@ -185,32 +182,36 @@ void BlockFile::set_header(			// set remain bytes excluding header
 //
 //  We point out the difference of counting among the <number>, <act_block> 
 //  and <pos>.
-//  (1) <num_blocks_>: 记录block的个数，不包括header的block，从1开始。
-//  (2) <act_block_>: 记录当前已经读写的block的个数，包括header的block，
-//      因此当我们在读写文件的时候，<act_block>为1（已经读过了header）。它和文件指针相对应。 
-//  (3) <index> : 记录我们打算读写的block的位置，不包括header的block，从0开始。
-//      例如当<index> = 0时，文件指针指向header的block的下一个block，此时<act_block_>等于1。
+//  (1) <num_blocks_>: record the number of blocks, excluding the block
+//      of header. start from 1. (internal block)
+//  (2) <act_block_>: record the number of blocks currently read or written,
+//      including the block of header, thus when we read or write file,
+//      current <act_block> equal to 1. <act_block> is corresponding to
+//      file pointer.
+//  (3) <index> : record position of block we want to read or write, excluding
+//      the block of header. start from 0. (external block), i.e., when 
+//      <index> = 0, the file pointer is pointed to next block after the 
+//      block of header, at this time, <act_block_> equals to 1.
 //
-//  例子：如果number为3，那么文件里一共有4个block，其中有一个header的block和3个data的block。
+//  i.e. if number = 3, there are 4 blocks in the file, 1 header block +
+//  3 data block.
 //
-//  当文件被打开，<act_block_>为1。如果<index>为1，这意味着我们打算读写第三个block
-//  （第二个data的block），因此首先index自增变成2，然后feesk把文件指针移到第二个data的block。
+//  When file is opened, <act_block_> = 1. if <index> = 1, it means that we 
+//  want to read or write the 3rd block (2nd data block), thus firstly index++,
+//  then <index> = 2, then fseek move to 2nd data block.
 //
-//  对第二个data的block读写结束后，文件指针指向第三个数据的block。此时已经读写了3个block，
-//  （1个header，2个data）因此现在<act_block> = <index> + 1 = 2 + 1 = 3。
+//  After reading or writing the 2nd data block, file pointer is pointed to 
+//  the 3rd data block. As we know it has read or written 3 blocks, thus 
+//  currently <act_block> = <index> + 1 = 2 + 1 = 3.
 // -----------------------------------------------------------------------------
 bool BlockFile::read_block(			// read a <block> from <index>
 	Block block,						// a <block> (return)
-	int index)							// 要读取第几号data的block（从0开始）
+	int index)							// pos of the block
 {
-	index++;						// 自增后，表示要所有block中的第几号（header的block是第0号）
+	index++;						// extrnl block to intrnl block
 									// move to the position
 	if (index <= num_blocks_ && index > 0) {
 		seek_block(index);
-		// 举个例子，假设此时index是1，代表要访问第一个data的block，
-		// 如果此时act_block_和index相等，也为1，代表已经读写过1个块（就是header块）。
-		// 代表此时文件指针指向第一个data的block的开头，因此文件指针不需要移动。
-		// 查看seek_block函数的源码来进一步了解。
 	}
 	else {
 		printf("BlockFile::read_block request the block %d "
@@ -230,8 +231,9 @@ bool BlockFile::read_block(			// read a <block> from <index>
 }
 
 // -----------------------------------------------------------------------------
-//  这个函数是用来写已经存在的block的，不能超过<num_blocks>的范围。
-//  如果要分配新的block，应该调用append_block函数。
+//  Note that this function can only write to an already "allocated" block (in 
+//  the range of <num_blocks>).
+//  If you allocate a new block, please use "append_block" instead.
 // -----------------------------------------------------------------------------
 bool BlockFile::write_block(		// write a <block> into <index>
 	Block block,						// a <block>
@@ -247,7 +249,7 @@ bool BlockFile::write_block(		// write a <block> into <index>
 			"which is illegal.", index - 1);
 		error("\n", true);
 	}
-	
+
 	put_bytes(block, block_length_);// write this block
 	if (index + 1 > num_blocks_) {	// update <act_block_>
 		fseek(fp_, 0, SEEK_SET);
@@ -260,7 +262,8 @@ bool BlockFile::write_block(		// write a <block> into <index>
 }
 
 // -----------------------------------------------------------------------------
-//  在文件末尾追加新的block。文件指针指向新追加的block并返回它的位置(从0开始的不包括header的block编号)。
+//  Append a new block at the end of file (out of the range of <num_blocks_>).
+//  The file pointer is pointed to the new appended block and return its pos.
 // -----------------------------------------------------------------------------
 int BlockFile::append_block(		// append new block at the end of file
 	Block block)						// the new block
@@ -268,25 +271,26 @@ int BlockFile::append_block(		// append new block at the end of file
 	fseek(fp_, 0, SEEK_END);		// <fp_> point to the end of file
 	put_bytes(block, block_length_);// write a <block>
 	num_blocks_++;					// add 1 to <num_blocks_>
-	
-	fseek(fp_, SIZEINT, SEEK_SET);	// <fp_> point to pos of header，跳过一个int的大小，因为第一个int储存一个block的大小
+
+	fseek(fp_, SIZEINT, SEEK_SET);	// <fp_> point to pos of header
 	fwrite_number(num_blocks_);		// update <num_blocks_>
 
-	// -------------------------------------------------------------------------
-	//  <fp_> point to the pos of new added block. 
-	//  The equation <act_block_> = <num_blocks_> indicates the file pointer 
-	//  point to new added block.
-	//  Return index of new added block
-	// -------------------------------------------------------------------------
+									// -------------------------------------------------------------------------
+									//  <fp_> point to the pos of new added block. 
+									//  The equation <act_block_> = <num_blocks_> indicates the file pointer 
+									//  point to new added block.
+									//  Return index of new added block
+									// -------------------------------------------------------------------------
 	fseek(fp_, -block_length_, SEEK_END);
-	act_block_ = num_blocks_;
-	return act_block_ - 1;
+	return (act_block_ = num_blocks_) - 1;
 }
 
 // -----------------------------------------------------------------------------
 //  Delete last <num> block in the file.
 //
-//  只是修改了block的个数，数据还是储存在文件中，文件大小不变。
+//  Notice: we just logically delete the data (only modifying the total number
+//  of blcoks), the real data is still stored in file and the size of file is 
+//  not changed.
 // -----------------------------------------------------------------------------
 bool BlockFile::delete_last_blocks(	// delete last <num> blocks
 	int num)							// number of blocks to be deleted

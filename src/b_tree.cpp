@@ -1,5 +1,10 @@
-#include "headers.h"
-
+#pragma warning(disable:4996)
+#include "b_node.h"
+#include "b_tree.h"
+#include "block_file.h"
+#include "LItem.h"
+#include <cstring>
+#include <cassert>
 
 // -----------------------------------------------------------------------------
 //  BTree: 建立在Lj集合上的B+树
@@ -43,14 +48,14 @@ void BTree::init(		// init a new tree
 	if (fp)
 	{ // check whether the file exist
 		fclose(fp); // ask whether replace?
-		printf("The file \"%s\" exists. Replace? (y/n)", fname);
-
-		char c = getchar(); // input 'Y' or 'y' or others
-		getchar(); // input <ENTER>
-		if (c != 'y' && c != 'Y')
-		{ // if not remove existing file
-			error("", true); // program will be stopped.
-		}
+//		printf("The file \"%s\" exists. Replace? (y/n)", fname);
+//
+//		char c = getchar(); // input 'Y' or 'y' or others
+//		getchar(); // input <ENTER>
+//		if (c != 'y' && c != 'Y')
+//		{ // if not remove existing file
+//			error("", true); // program will be stopped.
+//		}
 		remove(fname); // otherwise, remove existing file
 	}
 	// init <file>, b-tree store here
@@ -68,12 +73,11 @@ void BTree::init(		// init a new tree
 }
 
 // -----------------------------------------------------------------------------
-void BTree::init_restore(// load the tree from a tree file
-	char* fname) // file name
+void BTree::init_restore(	// load the tree from a tree file
+	char* fname) 			// file name
 {
 	FILE* fp = fopen(fname, "r"); // check whether the file exists
-	if (!fp)
-	{
+	if (!fp) {
 		printf("tree file %s does not exist\n", fname);
 		delete[] fname;
 		fname = nullptr;
@@ -173,6 +177,7 @@ int BTree::bulkload(	// bulkload a tree from memory
 
 	//  存储level 0数据 建立叶子节点间的双向链表
 	for (int i = 0; i < n; i++) {
+
 		index = Ltable[i].getIndex();
 		value = Ltable[i].getValue();
 
@@ -300,12 +305,74 @@ int BTree::bulkload(	// bulkload a tree from memory
 	}
 	if (leaf_act_nd != nullptr) {
 		delete leaf_act_nd;
-		leaf_act_nd = NULL;
+		leaf_act_nd = nullptr;
 	}
-	if (leaf_child != NULL) {
+	if (leaf_child != nullptr) {
 		delete leaf_child;
-		leaf_child = NULL;
+		leaf_child = nullptr;
 	}
 
 	return 0; // success to return
 }
+
+void BTree::searchLowerAndHigher(float query,
+							 	 BLeafNode* & lower, int & lowerIndex,
+							     BLeafNode* & higher, int & higherIndex) {
+	//  You should use init the b+tree before use this method
+	load_root();
+	BNode *searchRoot = root_ptr_;
+	assert(searchRoot != nullptr);
+	int entries;
+	while (true) {
+		entries = searchRoot->get_num_entries();
+		for (int i = 0; i < entries; ++i) {
+			if ((i == entries - 1) || (query < searchRoot->get_key(i + 1))) {	
+				if (searchRoot->get_level() > 1) {
+					int nextNode = dynamic_cast<BIndexNode*>(searchRoot)->get_son(i);
+					searchRoot = new BIndexNode();
+					searchRoot->init_restore(this, nextNode);
+					break;
+				} else if (searchRoot->get_level() == 1) {
+					int nextNode = dynamic_cast<BIndexNode*>(searchRoot)->get_son(i);
+					if (searchRoot != nullptr) {
+						delete searchRoot;
+						searchRoot = nullptr;
+					}
+					searchRoot = new BLeafNode();
+					searchRoot->init_restore(this, nextNode);
+					break;
+				} else if (searchRoot->get_level() == 0) {
+					BLeafNode *high = dynamic_cast<BLeafNode*>(searchRoot);
+					BLeafNode *low = high->get_left_sibling();
+					higherIndex = 0;
+					if (low == nullptr)	{
+						lowerIndex = -1;
+					} else {
+						bool found = false;
+						for (higherIndex = 1; higherIndex < low->get_num_entries(); ++higherIndex) {
+							if (low->get_key(higherIndex) >= query) {
+								found = true;
+								high = low;
+								lowerIndex = higherIndex - 1;
+								break;
+							}
+						}
+						if (!found) {
+							higherIndex = 0;
+							if (low == nullptr) {
+								lowerIndex = -1;
+							} else {
+								lowerIndex = low->get_entry_size() - 1;
+							}
+						}
+					}
+					//delete searchRoot;
+					//searchRoot = nullptr;
+					higher = high;
+					lower = low;
+					return;
+				}
+			}
+		}
+	}
+} 
